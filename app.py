@@ -4,13 +4,12 @@ import os
 import streamlit as st
 from google import genai
 
-# Streamlit Page Setup
+# Streamlit Page Setup mit Kreuz-Icon
 st.set_page_config(
-    page_title="Bibelberater", page_icon="📖", layout="centered"
+    page_title="Bibelberater", page_icon="✝️", layout="centered"
 )
 
 # Dateinamen & Ordner für die Cloud-Sitzung
-# (In der Cloud nutzen wir Streamlit Session State für die Anzeige)
 HISTORY_FILE = "bibel_chat_history.json"
 ARCHIVE_DIR = "bibel_chat_archives"
 
@@ -73,7 +72,6 @@ def archive_current_chat():
 # Gemini Client initialisieren (holt den Key aus den Streamlit Secrets)
 @st.cache_resource
 def get_gemini_client():
-  # Streamlit liest die API-Keys aus st.secrets
   api_key = st.secrets.get("GEMINI_API_KEY")
   return genai.Client(api_key=api_key)
 
@@ -89,7 +87,7 @@ SYSTEM_INSTRUCTION = (
     " Gespräch vertiefend fortzuführen."
 )
 
-st.title("📖 Bibelberater")
+st.title("✝️ Bibelberater")
 st.caption("Dein persönlicher Begleiter in der Cloud.")
 
 if "messages" not in st.session_state:
