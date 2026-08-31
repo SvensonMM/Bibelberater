@@ -3,6 +3,7 @@ import json
 import os
 import streamlit as st
 from google import genai
+from streamlit_mic_recorder import mic_recorder
 
 # Streamlit Page Setup mit Kreuz-Icon
 st.set_page_config(
@@ -178,18 +179,22 @@ for i, message in enumerate(st.session_state.messages):
                 """
         st.components.v1.html(js_code, height=0)
 
-# Chat-Eingabe
-if user_input := st.chat_input("Schreibe oder frage etwas..."):
-  st.session_state.messages.append({"role": "user", "content": user_input})
+
+# Funktion zur Verarbetung von Texteingaben oder Sprachaufnahmen
+def process_user_input(text_to_process):
+  if not text_to_process:
+    return
+
+  st.session_state.messages.append({"role": "user", "content": text_to_process})
   save_history(st.session_state.messages)
 
   with st.chat_message("user"):
-    st.markdown(user_input)
+    st.markdown(text_to_process)
 
   with st.chat_message("assistant"):
     with st.spinner("Der Bibelberater denkt nach..."):
       try:
-        response = st.session_state.chat_session.send_message(user_input)
+        response = st.session_state.chat_session.send_message(text_to_process)
         bot_reply = response.text
         st.markdown(bot_reply)
 
@@ -212,3 +217,46 @@ if user_input := st.chat_input("Schreibe oder frage etwas..."):
 
       except Exception as e:
         st.error(f"Fehler bei der Verbindung: {str(e)}")
+
+
+# Direkter Mikrofon-Button in der Oberfläche
+col_mic, col_info = st.columns([1, 3])
+with col_mic:
+  audio_data = mic_recorder(
+      start_prompt="🎙️ Sprechen",
+      stop_prompt="⏹️ Stopp",
+      just_once=True,
+      key="mic",
+  )
+
+with col_info:
+  st.caption(
+      "Tippe auf 'Sprechen', um deine Frage direkt per Mikrofon aufzunehmen."
+  )
+
+# Wenn eine Sprachaufnahme gemacht wurde, von Gemini transkribieren lassen
+if audio_data:
+  audio_bytes = audio_data.get("bytes")
+  if audio_bytes:
+    with st.spinner("Verarbeite Sprache..."):
+      try:
+        # Wir nutzen Gemini direkt, um die Sprachdatei zu transkribieren
+        transcribe_response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[
+                (
+                    "Wandle diese Audionachricht exakt auf Deutsch in Text"
+                    " um. Gib nur den gesprochenen Text zurück, sonst nichts."
+                ),
+                {"mime_type": "audio/wav", "data": audio_bytes},
+            ],
+        )
+        spoken_text = transcribe_response.text.strip()
+        if spoken_text:
+          process_user_input(spoken_text)
+      except Exception as e:
+        st.error(f"Fehler bei der Spracherkennung: {e}")
+
+# Normale Chat-Eingabe (Tastatur)
+if user_input := st.chat_input("Schreibe oder frage etwas..."):
+  process_user_input(user_input)
