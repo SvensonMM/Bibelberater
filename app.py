@@ -80,6 +80,26 @@ def get_gemini_client():
 
 client = get_gemini_client()
 
+
+# Automatischer Test, welches Modell aktuell ohne Fehler erreichbar ist
+@st.cache_resource
+def get_best_available_model():
+  candidate_models = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.0-flash"]
+  for model_name in candidate_models:
+    try:
+      # Kurzer Test-Ping an das Modell
+      client.models.generate_content(
+          model=model_name, contents="Test"
+      )
+      return model_name
+    except Exception:
+      continue
+  # Fallback falls alle Stricke reißen
+  return "gemini-3.6-flash"
+
+
+ACTIVE_MODEL = get_best_available_model()
+
 SYSTEM_INSTRUCTION = (
     "Du bist ein einfühlsamer, kluger und theologisch fundierter Bibelberater."
     " Die Person, mit der du sprichst, heißt Brigitte. Verwende ihren Namen"
@@ -110,6 +130,7 @@ with st.sidebar:
       value=st.session_state.voice_enabled,
       help="Liest die Antworten des Bibelberaters automatisch vor.",
   )
+  st.caption(f"Aktives KI-Modell: `{ACTIVE_MODEL}`")
 
   st.divider()
   st.header("🗂️ Chat-Verwaltung")
@@ -153,7 +174,7 @@ if "messages" not in st.session_state:
 
 if "chat_session" not in st.session_state:
   st.session_state.chat_session = client.chats.create(
-      model="gemini-2.5-flash",
+      model=ACTIVE_MODEL,
       config=genai.types.GenerateContentConfig(
           system_instruction=SYSTEM_INSTRUCTION, temperature=0.7
       ),
@@ -248,9 +269,9 @@ if audio_data:
         # Datei über die offizielle Files API hochladen
         audio_file_ref = client.files.upload(file=temp_audio_path)
 
-        # Transkribieren lassen mit dem stabilen Standardmodell
+        # Transkribieren lassen mit dem automatisch ermittelten Modell
         transcribe_response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model=ACTIVE_MODEL,
             contents=[
                 (
                     "Wandle diese Audionachricht exakt auf Deutsch in Text"
