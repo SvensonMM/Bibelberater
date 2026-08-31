@@ -110,9 +110,7 @@ SYSTEM_INSTRUCTION = (
 )
 
 st.title("✝️ Bibelberater")
-st.caption(
-    "Dein persönlicher Begleiter in der Cloud – schnell, stabil & direkt."
-)
+st.caption("Dein persönlicher Begleiter in der Cloud.")
 
 # Session States für Audio-Optionen
 if "voice_enabled" not in st.session_state:
@@ -251,6 +249,47 @@ def process_user_input(text_to_process):
         )
 
 
-# Normale Chat-Eingabe (Tastatur & Samsung-Mikrofon-Taste unten links)
+# Option zum Hochladen einer Sprachdatei / Sprachnachricht direkt in der App
+uploaded_audio = st.file_uploader(
+    "🎙️ Sprachnachricht hochladen (optional)",
+    type=["wav", "mp3", "m4a", "ogg"],
+    help=(
+        "Nimm eine Sprachnachricht auf deinem Handy auf und lade sie hier hoch."
+    ),
+)
+
+if uploaded_audio is not None:
+  with st.spinner("Transkribiere Sprachnachricht..."):
+    temp_audio_path = "temp_uploaded_audio.wav"
+    try:
+      with open(temp_audio_path, "wb") as f:
+        f.write(uploaded_audio.getbuffer())
+
+      audio_file_ref = client.files.upload(file=temp_audio_path)
+
+      transcribe_response = client.models.generate_content(
+          model=ACTIVE_MODEL,
+          contents=[
+              (
+                  "Wandle diese Audionachricht exakt auf Deutsch in Text um."
+                  " Gib nur den transkribierten Text zurück, ohne Zusätze."
+              ),
+              audio_file_ref,
+          ],
+      )
+      spoken_text = transcribe_response.text.strip()
+
+      if os.path.exists(temp_audio_path):
+        os.remove(temp_audio_path)
+
+      if spoken_text:
+        process_user_input(spoken_text)
+
+    except Exception as e:
+      if os.path.exists(temp_audio_path):
+        os.remove(temp_audio_path)
+      st.error(f"Fehler bei der Sprachverarbeitung: {e}")
+
+# Normale Chat-Eingabe (Tastatur)
 if user_input := st.chat_input("Schreibe oder frage etwas..."):
   process_user_input(user_input)
