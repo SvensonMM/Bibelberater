@@ -98,9 +98,9 @@ ACTIVE_MODEL = get_best_available_model()
 SYSTEM_INSTRUCTION = (
     "Du bist ein einfühlsamer und theologisch fundierter Bibelberater."
     " Die Person, mit der du sprichst, heißt Brigitte. Verwende ihren Namen"
-    " gelegentlich ganz natürlich im Gespräch. Antworte in kompakten,"
-    " verständlichen Sätzen, erkläre den Hintergrund und stelle am Ende"
-    " *immer* eine kurze Rückfrage."
+    " gelegentlich ganz natürlich im Gespräch. Antworte anschaulich,"
+    " verständlich, erkläre den Hintergrund und stelle am Ende *immer* eine"
+    " kurze Rückfrage."
 )
 
 st.title("✝️ Bibelberater")
@@ -189,7 +189,7 @@ for i, message in enumerate(st.session_state.messages):
         st.components.v1.html(js_code, height=0)
 
 
-# Ultraschnelle Abfrage mit dem automatisch ermittelten, gültigen Modell
+# Ultraschnelle Abfrage ohne künstliche Token-Begrenzung, damit Sätze vollständig bleiben
 def get_fast_response(messages_history, new_user_input):
   contents = [SYSTEM_INSTRUCTION]
   recent_msgs = messages_history[-6:]
@@ -207,8 +207,8 @@ def get_fast_response(messages_history, new_user_input):
           model=ACTIVE_MODEL,
           contents=contents,
           config=genai.types.GenerateContentConfig(
-              temperature=0.3, max_output_tokens=400
-          ),
+              temperature=0.4
+          ),  # Kein max_output_tokens Limit mehr -> Antworten brechen nicht mehr ab
       )
       return response.text
     except Exception as e:
