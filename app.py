@@ -184,11 +184,36 @@ for i, message in enumerate(st.session_state.messages):
           "🔊 Vorlesen", key=f"tts_btn_{i}", help="Diese Antwort vorlesen"
       ):
         clean_text = message["content"].replace('"', "'").replace("\n", " ")
+        # JavaScript mit optimierter Stimmensuche für Android/Samsung
         js_code = f"""
                 <script>
-                    var msg = new SpeechSynthesisUtterance("{clean_text}");
-                    msg.lang = 'de-DE';
-                    window.speechSynthesis.speak(msg);
+                    function speakText() {{
+                        var text = "{clean_text}";
+                        var utterance = new SpeechSynthesisUtterance(text);
+                        utterance.lang = 'de-DE';
+                        utterance.rate = 0.95; // Etwas ruhiger und natürlicher gesprochen
+                        
+                        var voices = window.speechSynthesis.getVoices();
+                        // Suche gezielt nach einer Google- oder hochwertigen deutschen Stimme auf dem Handy
+                        var preferredVoice = voices.find(v => v.lang === 'de-DE' && (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Online')));
+                        if (!preferredVoice) {{
+                            preferredVoice = voices.find(v => v.lang === 'de-DE' || v.lang === 'de_DE');
+                        }}
+                        if (preferredVoice) {{
+                            utterance.voice = preferredVoice;
+                        }}
+                        
+                        window.speechSynthesis.cancel(); // Laufende Sprachausgabe stoppen
+                        window.speechSynthesis.speak(utterance);
+                    }}
+                    if ('speechSynthesis' in window) {{
+                        if (window.speechSynthesis.getVoices().length > 0) {{
+                            speakText();
+                        }} else {{
+                            window.speechSynthesis.onvoiceschanged = speakText;
+                            speakText();
+                        }}
+                    }}
                 </script>
                 """
         st.components.v1.html(js_code, height=0)
@@ -207,7 +232,7 @@ def safe_send_message(chat_session, text):
       raise e
 
 
-# Chat-Eingabe (unten am Bildschirm, sauber und aufgeräumt)
+# Chat-Eingabe
 if user_input := st.chat_input("Schreibe deine Nachricht..."):
   st.session_state.messages.append({"role": "user", "content": user_input})
   save_history(st.session_state.messages)
@@ -233,9 +258,32 @@ if user_input := st.chat_input("Schreibe deine Nachricht..."):
           clean_reply = bot_reply.replace('"', "'").replace("\n", " ")
           tts_script = f"""
                     <script>
-                        var msg = new SpeechSynthesisUtterance("{clean_reply}");
-                        msg.lang = 'de-DE';
-                        window.speechSynthesis.speak(msg);
+                        function speakReply() {{
+                            var text = "{clean_reply}";
+                            var utterance = new SpeechSynthesisUtterance(text);
+                            utterance.lang = 'de-DE';
+                            utterance.rate = 0.95;
+                            
+                            var voices = window.speechSynthesis.getVoices();
+                            var preferredVoice = voices.find(v => v.lang === 'de-DE' && (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Online')));
+                            if (!preferredVoice) {{
+                                preferredVoice = voices.find(v => v.lang === 'de-DE' || v.lang === 'de_DE');
+                            }}
+                            if (preferredVoice) {{
+                                utterance.voice = preferredVoice;
+                            }}
+                            
+                            window.speechSynthesis.cancel();
+                            window.speechSynthesis.speak(utterance);
+                        }}
+                        if ('speechSynthesis' in window) {{
+                            if (window.speechSynthesis.getVoices().length > 0) {{
+                                speakReply();
+                            }} else {{
+                                window.speechSynthesis.onvoiceschanged = speakReply;
+                                speakReply();
+                            }}
+                        }}
                     </script>
                     """
           st.components.v1.html(tts_script, height=0)
