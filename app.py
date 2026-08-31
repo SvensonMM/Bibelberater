@@ -5,9 +5,24 @@ import time
 import streamlit as st
 from google import genai
 
-# Streamlit Page Setup mit Kreuz-Icon
+# Streamlit Page Setup mit Kreuz-Icon und Titel
 st.set_page_config(
     page_title="Bibelberater", page_icon="✝️", layout="centered"
+)
+
+# PWA-Manifest-Trick, damit Edge & Samsung direkt "Bibelberater" als Namen übernehmen
+st.markdown(
+    """
+    <link rel="manifest" href="data:application/manifest+json;charset=utf-8,{
+      'name': 'Bibelberater',
+      'short_name': 'Bibelberater',
+      'start_url': '.',
+      'display': 'standalone',
+      'background_color': '#ffffff',
+      'theme_color': '#ffffff'
+    }">
+""",
+    unsafe_allow_html=True,
 )
 
 # Dateinamen & Ordner für die Cloud-Sitzung
@@ -189,7 +204,7 @@ for i, message in enumerate(st.session_state.messages):
         st.components.v1.html(js_code, height=0)
 
 
-# Ultraschnelle Abfrage ohne künstliche Token-Begrenzung, damit Sätze vollständig bleiben
+# Ultraschnelle Abfrage im Direkt-Modus (ohne starre Token-Begrenzung)
 def get_fast_response(messages_history, new_user_input):
   contents = [SYSTEM_INSTRUCTION]
   recent_msgs = messages_history[-6:]
@@ -206,9 +221,7 @@ def get_fast_response(messages_history, new_user_input):
       response = client.models.generate_content(
           model=ACTIVE_MODEL,
           contents=contents,
-          config=genai.types.GenerateContentConfig(
-              temperature=0.4
-          ),  # Kein max_output_tokens Limit mehr -> Antworten brechen nicht mehr ab
+          config=genai.types.GenerateContentConfig(temperature=0.4),
       )
       return response.text
     except Exception as e:
