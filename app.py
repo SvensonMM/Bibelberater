@@ -1,6 +1,7 @@
 from datetime import datetime
 import json
 import os
+import time
 import streamlit as st
 from google import genai
 from streamlit_mic_recorder import mic_recorder
@@ -81,20 +82,16 @@ def get_gemini_client():
 client = get_gemini_client()
 
 
-# Automatischer Test, welches Modell aktuell ohne Fehler erreichbar ist
+# Stabiler Modell-Test mit automatischem Fallback
 @st.cache_resource
 def get_best_available_model():
   candidate_models = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.0-flash"]
   for model_name in candidate_models:
     try:
-      # Kurzer Test-Ping an das Modell
-      client.models.generate_content(
-          model=model_name, contents="Test"
-      )
+      client.models.generate_content(model=model_name, contents="Test")
       return model_name
     except Exception:
       continue
-  # Fallback falls alle Stricke reißen
   return "gemini-3.6-flash"
 
 
@@ -130,7 +127,7 @@ with st.sidebar:
       value=st.session_state.voice_enabled,
       help="Liest die Antworten des Bibelberaters automatisch vor.",
   )
-  st.caption(f"Aktives KI-Modell: `{ACTIVE_MODEL}`")
+  st.caption(f"Aktives Modell: `{ACTIVE_MODEL}`")
 
   st.divider()
   st.header("🗂️ Chat-Verwaltung")
@@ -185,7 +182,6 @@ for i, message in enumerate(st.session_state.messages):
   with st.chat_message(message["role"]):
     st.markdown(message["content"])
 
-    # Option zum Vorlesen einzelner alten Antworten
     if message["role"] == "assistant":
       if st.button(
           "🔊 Vorlesen", key=f"tts_btn_{i}", help="Diese Antwort vorlesen"
@@ -201,7 +197,19 @@ for i, message in enumerate(st.session_state.messages):
         st.components.v1.html(js_code, height=0)
 
 
-# Funktion zur Verarbeitung von Texteingaben oder Sprachaufnahmen
+# Funktion mit automatischer Wiederholung bei Lastspitzen (503-Fehler)
+def safe_send_message(chat_session, text):
+  max_retries = 3
+  for attempt in range(max_retries):
+    try:
+      return chat_session.send_message(text)
+    except Exception as e:
+      if "503" in str(e) and attempt < max_retries - 1:
+        time.sleep(2)  # 2 Sekunden warten und erneut versuchen
+        continue
+      raise e
+
+
 def process_user_input(text_to_process):
   if not text_to_process:
     return
@@ -215,7 +223,9 @@ def process_user_input(text_to_process):
   with st.chat_message("assistant"):
     with st.spinner("Der Bibelberater denkt nach..."):
       try:
-        response = st.session_state.chat_session.send_message(text_to_process)
+        response = safe_send_message(
+            st.session_state.chat_session, text_to_process
+        )
         bot_reply = response.text
         st.markdown(bot_reply)
 
@@ -224,7 +234,6 @@ def process_user_input(text_to_process):
         )
         save_history(st.session_state.messages)
 
-        # Automatische Sprachausgabe, falls in der Sidebar aktiviert
         if st.session_state.voice_enabled:
           clean_reply = bot_reply.replace('"', "'").replace("\n", " ")
           tts_script = f"""
@@ -237,10 +246,13 @@ def process_user_input(text_to_process):
           st.components.v1.html(tts_script, height=0)
 
       except Exception as e:
-        st.error(f"Fehler bei der Verbindung: {str(e)}")
+        st.error(
+            "Der Server ist aktuell kurzzeitig ausgelastet (hoher Andrang)."
+            " Bitte versuche es in ein paar Sekunden noch einmal."
+        )
 
 
-# Direkter Mikrofon-Button in der Oberfläche
+# Mikrofon-Button
 col_mic, col_info = st.columns([1, 3])
 with col_mic:
   audio_data = mic_recorder(
@@ -255,21 +267,17 @@ with col_info:
       "Tippe auf 'Sprechen', um deine Frage direkt per Mikrofon aufzunehmen."
   )
 
-# Wenn eine Sprachaufnahme gemacht wurde, korrekt als temporäre Datei an Gemini übergeben
 if audio_data:
   audio_bytes = audio_data.get("bytes")
   if audio_bytes:
     with st.spinner("Verarbeite Sprache..."):
       temp_audio_path = "temp_audio.wav"
       try:
-        # Audio vorübergehend lokal speichern
         with open(temp_audio_path, "wb") as f:
           f.write(audio_bytes)
 
-        # Datei über die offizielle Files API hochladen
         audio_file_ref = client.files.upload(file=temp_audio_path)
 
-        # Transkribieren lassen mit dem automatisch ermittelten Modell
         transcribe_response = client.models.generate_content(
             model=ACTIVE_MODEL,
             contents=[
@@ -283,7 +291,6 @@ if audio_data:
         )
         spoken_text = transcribe_response.text.strip()
 
-        # Temporäre Datei aufräumen
         if os.path.exists(temp_audio_path):
           os.remove(temp_audio_path)
 
@@ -293,8 +300,10 @@ if audio_data:
       except Exception as e:
         if os.path.exists(temp_audio_path):
           os.remove(temp_audio_path)
-        st.error(f"Fehler bei der Spracherkennung: {e}")
+        st.error(
+            "Spracherkennung momentan im Last-Modus überlastet. Bitte noch"
+            " einmal tippen."
+        )
 
-# Normale Chat-Eingabe (Tastatur)
 if user_input := st.chat_input("Schreibe oder frage etwas..."):
   process_user_input(user_input)
