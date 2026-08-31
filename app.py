@@ -32,11 +32,12 @@ def get_default_greeting():
       "role":
           "assistant",
       "content": (
-          "Sei gegrüßt! Ich begleite dich als dein persönlicher Bibelberater."
-          " Ganz egal, ob du eine Frage zu einem bestimmten Bibelvers hast, den"
-          " historischen Hintergrund verstehen möchtest oder einen Impuls für"
-          " deinen Alltag suchst – lass uns ins Gespräch kommen.\n\nZu welchem"
-          " Thema oder Bibelabschnitt möchtest du heute sprechen?"
+          "Sei gegrüßt, liebe Brigitte! Ich begleite dich heute als dein"
+          " persönlicher Bibelberater. Ganz egal, ob du eine Frage zu einem"
+          " bestimmten Bibelvers hast, den historischen Hintergrund"
+          " verstehen möchtest oder einen Impuls für deinen Alltag suchst –"
+          " lass uns ins Gespräch kommen.\n\nZu welchem Thema oder"
+          " Bibelabschnitt möchtest du heute sprechen?"
       ),
   }]
 
@@ -80,54 +81,36 @@ client = get_gemini_client()
 
 SYSTEM_INSTRUCTION = (
     "Du bist ein einfühlsamer, kluger und theologisch fundierter Bibelberater."
-    " Deine Aufgabe ist es, in einem lockeren, dialogorientierten Gespräch auf"
-    " Fragen des Nutzers zu antworten. Antworte nicht nur mit Bibelversen,"
-    " sondern erkläre den historischen und kulturellen Hintergrund. Wichtig:"
-    " Stelle am Ende deiner Antwort *immer* eine passende Rückfrage, um das"
-    " Gespräch vertiefend fortzuführen."
+    " Die Person, mit der du sprichst, heißt Brigitte. Verwende ihren Namen"
+    " gelegentlich ganz natürlich im Gespräch (z. B. zur Begrüßung, bei"
+    " Ermutigungen oder passenden Übergängen), aber nicht in jedem Satz,"
+    " damit es sich echt und herzlich anfühlt. Deine Aufgabe ist es, in einem"
+    " lockeren, dialogorientierten Gespräch auf Fragen von Brigitte zu"
+    " antworten. Antworte nicht nur mit Bibelversen, sondern erkläre den"
+    " historischen und kulturellen Hintergrund. Wichtig: Stelle am Ende"
+    " deiner Antwort *immer* eine passende Rückfrage, um das Gespräch"
+    " vertiefend fortzuführen."
 )
 
 st.title("✝️ Bibelberater")
-st.caption("Dein persönlicher Begleiter in der Cloud.")
+st.caption(
+    "Dein persönlicher Begleiter in der Cloud – mit Sprach- & Textunterstützung."
+)
 
-if "messages" not in st.session_state:
-  st.session_state.messages = load_history()
+# Session States für Audio-Optionen
+if "voice_enabled" not in st.session_state:
+  st.session_state.voice_enabled = False
 
-if "chat_session" not in st.session_state:
-  st.session_state.chat_session = client.chats.create(
-      model="gemini-2.5-flash",
-      config=genai.types.GenerateContentConfig(
-          system_instruction=SYSTEM_INSTRUCTION, temperature=0.7
-      ),
+# Sidebar für Verwaltung & Audio-Einstellungen
+with st.sidebar:
+  st.header("⚙️ Optionen & Verwaltung")
+  st.session_state.voice_enabled = st.toggle(
+      "🔊 Automatische Sprachausgabe (TTS)",
+      value=st.session_state.voice_enabled,
+      help="Liest die Antworten des Bibelberaters automatisch vor.",
   )
 
-for message in st.session_state.messages:
-  with st.chat_message(message["role"]):
-    st.markdown(message["content"])
-
-if user_input := st.chat_input("Schreibe deine Nachricht..."):
-  st.session_state.messages.append({"role": "user", "content": user_input})
-  save_history(st.session_state.messages)
-
-  with st.chat_message("user"):
-    st.markdown(user_input)
-
-  with st.chat_message("assistant"):
-    with st.spinner("Der Bibelberater denkt nach..."):
-      try:
-        response = st.session_state.chat_session.send_message(user_input)
-        bot_reply = response.text
-        st.markdown(bot_reply)
-
-        st.session_state.messages.append(
-            {"role": "assistant", "content": bot_reply}
-        )
-        save_history(st.session_state.messages)
-      except Exception as e:
-        st.error(f"Fehler bei der Verbindung: {str(e)}")
-
-# Sidebar für Verwaltung
-with st.sidebar:
+  st.divider()
   st.header("🗂️ Chat-Verwaltung")
   if st.button("➕ Neuer Chat (Aktuellen archivieren)"):
     archive_current_chat()
@@ -163,3 +146,69 @@ with st.sidebar:
         if st.button("🗑️ Löschen", type="primary"):
           os.remove(archive_full_path)
           st.rerun()
+
+if "messages" not in st.session_state:
+  st.session_state.messages = load_history()
+
+if "chat_session" not in st.session_state:
+  st.session_state.chat_session = client.chats.create(
+      model="gemini-2.5-flash",
+      config=genai.types.GenerateContentConfig(
+          system_instruction=SYSTEM_INSTRUCTION, temperature=0.7
+      ),
+  )
+
+# Chatverlauf anzeigen
+for i, message in enumerate(st.session_state.messages):
+  with st.chat_message(message["role"]):
+    st.markdown(message["content"])
+
+    # Option zum Vorlesen einzelner alten Antworten
+    if message["role"] == "assistant":
+      if st.button(
+          "🔊 Vorlesen", key=f"tts_btn_{i}", help="Diese Antwort vorlesen"
+      ):
+        clean_text = message["content"].replace('"', "'").replace("\n", " ")
+        js_code = f"""
+                <script>
+                    var msg = new SpeechSynthesisUtterance("{clean_text}");
+                    msg.lang = 'de-DE';
+                    window.speechSynthesis.speak(msg);
+                </script>
+                """
+        st.components.v1.html(js_code, height=0)
+
+# Chat-Eingabe
+if user_input := st.chat_input("Schreibe oder frage etwas..."):
+  st.session_state.messages.append({"role": "user", "content": user_input})
+  save_history(st.session_state.messages)
+
+  with st.chat_message("user"):
+    st.markdown(user_input)
+
+  with st.chat_message("assistant"):
+    with st.spinner("Der Bibelberater denkt nach..."):
+      try:
+        response = st.session_state.chat_session.send_message(user_input)
+        bot_reply = response.text
+        st.markdown(bot_reply)
+
+        st.session_state.messages.append(
+            {"role": "assistant", "content": bot_reply}
+        )
+        save_history(st.session_state.messages)
+
+        # Automatische Sprachausgabe, falls in der Sidebar aktiviert
+        if st.session_state.voice_enabled:
+          clean_reply = bot_reply.replace('"', "'").replace("\n", " ")
+          tts_script = f"""
+                    <script>
+                        var msg = new SpeechSynthesisUtterance("{clean_reply}");
+                        msg.lang = 'de-DE';
+                        window.speechSynthesis.speak(msg);
+                    </script>
+                    """
+          st.components.v1.html(tts_script, height=0)
+
+      except Exception as e:
+        st.error(f"Fehler bei der Verbindung: {str(e)}")
