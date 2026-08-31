@@ -79,12 +79,25 @@ def get_gemini_client():
 
 client = get_gemini_client()
 
-# Fixes, schnelles Flash-Modell direkt definieren
-ACTIVE_MODEL = "gemini-2.5-flash"
+
+# Automatischer Test, welches Modell aktuell erreichbar ist
+@st.cache_resource
+def get_best_available_model():
+  candidate_models = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.0-flash"]
+  for model_name in candidate_models:
+    try:
+      client.models.generate_content(model=model_name, contents="Test")
+      return model_name
+    except Exception:
+      continue
+  return "gemini-3.6-flash"
+
+
+ACTIVE_MODEL = get_best_available_model()
 
 SYSTEM_INSTRUCTION = (
     "Du bist ein einfühlsamer und theologisch fundierter Bibelberater."
-    " Die Person, mit du sprichst, heißt Brigitte. Verwende ihren Namen"
+    " Die Person, mit der du sprichst, heißt Brigitte. Verwende ihren Namen"
     " gelegentlich ganz natürlich im Gespräch. Antworte in kompakten,"
     " verständlichen Sätzen, erkläre den Hintergrund und stelle am Ende"
     " *immer* eine kurze Rückfrage."
@@ -105,6 +118,7 @@ with st.sidebar:
       value=st.session_state.voice_enabled,
       help="Liest die Antworten automatisch vor.",
   )
+  st.caption(f"Aktives Modell: `{ACTIVE_MODEL}`")
 
   st.divider()
   st.header("🗂️ Chat-Verwaltung")
@@ -175,11 +189,9 @@ for i, message in enumerate(st.session_state.messages):
         st.components.v1.html(js_code, height=0)
 
 
-# Ultraschnelle Abfrage mit direktem Inhalts-Übertrag statt schwerem Chat-Objekt
+# Ultraschnelle Abfrage mit dem automatisch ermittelten, gültigen Modell
 def get_fast_response(messages_history, new_user_input):
-  # Wir bauen die letzten Nachrichten als kompakten Kontext zusammen
   contents = [SYSTEM_INSTRUCTION]
-  # Nur die letzten 6 Nachrichten nehmen, damit es rasend schnell bleibt
   recent_msgs = messages_history[-6:]
   for msg in recent_msgs:
     role_prefix = "Nutzer: " if msg["role"] == "user" else "Assistent: "
@@ -188,12 +200,22 @@ def get_fast_response(messages_history, new_user_input):
   contents.append("Nutzer: " + new_user_input)
   contents.append("Assistent:")
 
-  response = client.models.generate_content(
-      model=ACTIVE_MODEL,
-      contents=contents,
-      config=genai.types.GenerateContentConfig(temperature=0.3, max_output_tokens=400),
-  )
-  return response.text
+  max_retries = 3
+  for attempt in range(max_retries):
+    try:
+      response = client.models.generate_content(
+          model=ACTIVE_MODEL,
+          contents=contents,
+          config=genai.types.GenerateContentConfig(
+              temperature=0.3, max_output_tokens=400
+          ),
+      )
+      return response.text
+    except Exception as e:
+      if "503" in str(e) and attempt < max_retries - 1:
+        time.sleep(2)
+        continue
+      raise e
 
 
 # Chat-Eingabe
@@ -207,7 +229,6 @@ if user_input := st.chat_input("Schreibe deine Nachricht..."):
   with st.chat_message("assistant"):
     with st.spinner("Der Bibelberater antwortet..."):
       try:
-        # Direkter, schneller Abruf
         bot_reply = get_fast_response(
             st.session_state.messages[:-1], user_input
         )
