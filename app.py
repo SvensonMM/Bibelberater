@@ -153,7 +153,7 @@ if "messages" not in st.session_state:
 
 if "chat_session" not in st.session_state:
   st.session_state.chat_session = client.chats.create(
-      model="gemini-3.6-flash",
+      model="gemini-1.5-flash",
       config=genai.types.GenerateContentConfig(
           system_instruction=SYSTEM_INSTRUCTION, temperature=0.7
       ),
@@ -216,7 +216,10 @@ def process_user_input(text_to_process):
           st.components.v1.html(tts_script, height=0)
 
       except Exception as e:
-        st.error(f"Fehler bei der Verbindung: {str(e)}")
+        st.error(
+            f"Fehler bei der Verbindung: {str(e)}. Bitte versuche es in einem"
+            " Moment noch einmal."
+        )
 
 
 # Direkter Mikrofon-Button in der Oberfläche
@@ -248,9 +251,9 @@ if audio_data:
         # Datei über die offizielle Files API hochladen
         audio_file_ref = client.files.upload(file=temp_audio_path)
 
-        # Transkribieren lassen mit dem aktuellen Modell
+        # Transkribieren lassen mit dem stabilen 1.5-flash Modell
         transcribe_response = client.models.generate_content(
-            model="gemini-3.6-flash",
+            model="gemini-1.5-flash",
             contents=[
                 (
                     "Wandle diese Audionachricht exakt auf Deutsch in Text"
@@ -272,7 +275,9 @@ if audio_data:
       except Exception as e:
         if os.path.exists(temp_audio_path):
           os.remove(temp_audio_path)
-        st.error(f"Fehler bei der Spracherkennung: {e}")
+        st.error(
+            f"Fehler bei der Spracherkennung: {e}. Bitte noch einmal versuchen."
+        )
 
 # Normale Chat-Eingabe (Tastatur)
 if user_input := st.chat_input("Schreibe oder frage etwas..."):
