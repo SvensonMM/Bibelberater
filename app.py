@@ -4,7 +4,6 @@ import os
 import time
 import streamlit as st
 from google import genai
-from streamlit_mic_recorder import mic_recorder
 
 # Streamlit Page Setup mit Kreuz-Icon
 st.set_page_config(
@@ -72,7 +71,7 @@ def archive_current_chat():
         json.dump(messages, f, ensure_ascii=False, indent=4)
 
 
-# Gemini Client initialisieren (holt den Key aus den Streamlit Secrets)
+# Gemini Client initialisieren
 @st.cache_resource
 def get_gemini_client():
   api_key = st.secrets.get("GEMINI_API_KEY")
@@ -112,7 +111,7 @@ SYSTEM_INSTRUCTION = (
 
 st.title("✝️ Bibelberater")
 st.caption(
-    "Dein persönlicher Begleiter in der Cloud – mit Sprach- & Textunterstützung."
+    "Dein persönlicher Begleiter in der Cloud – schnell, stabil & direkt."
 )
 
 # Session States für Audio-Optionen
@@ -197,7 +196,7 @@ for i, message in enumerate(st.session_state.messages):
         st.components.v1.html(js_code, height=0)
 
 
-# Funktion mit automatischer Wiederholung bei Lastspitzen (503-Fehler)
+# Funktion mit automatischer Wiederholung bei Lastspitzen
 def safe_send_message(chat_session, text):
   max_retries = 3
   for attempt in range(max_retries):
@@ -205,7 +204,7 @@ def safe_send_message(chat_session, text):
       return chat_session.send_message(text)
     except Exception as e:
       if "503" in str(e) and attempt < max_retries - 1:
-        time.sleep(2)  # 2 Sekunden warten und erneut versuchen
+        time.sleep(2)
         continue
       raise e
 
@@ -247,63 +246,11 @@ def process_user_input(text_to_process):
 
       except Exception as e:
         st.error(
-            "Der Server ist aktuell kurzzeitig ausgelastet (hoher Andrang)."
-            " Bitte versuche es in ein paar Sekunden noch einmal."
+            "Der Server ist aktuell kurzzeitig ausgelastet. Bitte versuche es"
+            " in einem Moment noch einmal."
         )
 
 
-# Mikrofon-Button
-col_mic, col_info = st.columns([1, 3])
-with col_mic:
-  audio_data = mic_recorder(
-      start_prompt="🎙️ Sprechen",
-      stop_prompt="⏹️ Stopp",
-      just_once=True,
-      key="mic",
-  )
-
-with col_info:
-  st.caption(
-      "Tippe auf 'Sprechen', um deine Frage direkt per Mikrofon aufzunehmen."
-  )
-
-if audio_data:
-  audio_bytes = audio_data.get("bytes")
-  if audio_bytes:
-    with st.spinner("Verarbeite Sprache..."):
-      temp_audio_path = "temp_audio.wav"
-      try:
-        with open(temp_audio_path, "wb") as f:
-          f.write(audio_bytes)
-
-        audio_file_ref = client.files.upload(file=temp_audio_path)
-
-        transcribe_response = client.models.generate_content(
-            model=ACTIVE_MODEL,
-            contents=[
-                (
-                    "Wandle diese Audionachricht exakt auf Deutsch in Text"
-                    " um. Gib nur den transkribierten Text zurück, ohne"
-                    " Zusätze."
-                ),
-                audio_file_ref,
-            ],
-        )
-        spoken_text = transcribe_response.text.strip()
-
-        if os.path.exists(temp_audio_path):
-          os.remove(temp_audio_path)
-
-        if spoken_text:
-          process_user_input(spoken_text)
-
-      except Exception as e:
-        if os.path.exists(temp_audio_path):
-          os.remove(temp_audio_path)
-        st.error(
-            "Spracherkennung momentan im Last-Modus überlastet. Bitte noch"
-            " einmal tippen."
-        )
-
+# Normale Chat-Eingabe (Tastatur & Samsung-Mikrofon-Taste unten links)
 if user_input := st.chat_input("Schreibe oder frage etwas..."):
   process_user_input(user_input)
