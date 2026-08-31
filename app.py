@@ -180,7 +180,7 @@ for i, message in enumerate(st.session_state.messages):
         st.components.v1.html(js_code, height=0)
 
 
-# Funktion zur Verarbetung von Texteingaben oder Sprachaufnahmen
+# Funktion zur Verarbeitung von Texteingaben oder Sprachaufnahmen
 def process_user_input(text_to_process):
   if not text_to_process:
     return
@@ -234,27 +234,44 @@ with col_info:
       "Tippe auf 'Sprechen', um deine Frage direkt per Mikrofon aufzunehmen."
   )
 
-# Wenn eine Sprachaufnahme gemacht wurde, von Gemini transkribieren lassen
+# Wenn eine Sprachaufnahme gemacht wurde, korrekt als temporäre Datei an Gemini übergeben
 if audio_data:
   audio_bytes = audio_data.get("bytes")
   if audio_bytes:
     with st.spinner("Verarbeite Sprache..."):
+      temp_audio_path = "temp_audio.wav"
       try:
-        # Wir nutzen Gemini direkt, um die Sprachdatei zu transkribieren
+        # Audio vorübergehend lokal speichern
+        with open(temp_audio_path, "wb") as f:
+          f.write(audio_bytes)
+
+        # Datei über die offizielle Files API hochladen
+        audio_file_ref = client.files.upload(file=temp_audio_path)
+
+        # Transkribieren lassen
         transcribe_response = client.models.generate_content(
             model="gemini-2.5-flash",
             contents=[
                 (
                     "Wandle diese Audionachricht exakt auf Deutsch in Text"
-                    " um. Gib nur den gesprochenen Text zurück, sonst nichts."
+                    " um. Gib nur den transkribierten Text zurück, ohne"
+                    " Zusätze."
                 ),
-                {"mime_type": "audio/wav", "data": audio_bytes},
+                audio_file_ref,
             ],
         )
         spoken_text = transcribe_response.text.strip()
+
+        # Temporäre Datei aufräumen
+        if os.path.exists(temp_audio_path):
+          os.remove(temp_audio_path)
+
         if spoken_text:
           process_user_input(spoken_text)
+
       except Exception as e:
+        if os.path.exists(temp_audio_path):
+          os.remove(temp_audio_path)
         st.error(f"Fehler bei der Spracherkennung: {e}")
 
 # Normale Chat-Eingabe (Tastatur)
