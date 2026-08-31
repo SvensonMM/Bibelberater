@@ -35,10 +35,9 @@ def get_default_greeting():
       "content": (
           "Sei gegrüßt, liebe Brigitte! Ich begleite dich heute als dein"
           " persönlicher Bibelberater. Ganz egal, ob du eine Frage zu einem"
-          " bestimmten Bibelvers hast, den historischen Hintergrund"
-          " verstehen möchtest oder einen Impuls für deinen Alltag suchst –"
-          " lass uns ins Gespräch kommen.\n\nZu welchem Thema oder"
-          " Bibelabschnitt möchtest du heute sprechen?"
+          " bestimmten Bibelvers hast oder einen Impuls für deinen Alltag"
+          " suchst – lass uns ins Gespräch kommen.\n\nZu welchem Thema"
+          " möchtest du heute sprechen?"
       ),
   }]
 
@@ -80,53 +79,32 @@ def get_gemini_client():
 
 client = get_gemini_client()
 
-
-# Stabiler Modell-Test mit automatischem Fallback
-@st.cache_resource
-def get_best_available_model():
-  candidate_models = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.0-flash"]
-  for model_name in candidate_models:
-    try:
-      client.models.generate_content(model=model_name, contents="Test")
-      return model_name
-    except Exception:
-      continue
-  return "gemini-3.6-flash"
-
-
-ACTIVE_MODEL = get_best_available_model()
+# Fixes, schnelles Flash-Modell direkt definieren
+ACTIVE_MODEL = "gemini-2.5-flash"
 
 SYSTEM_INSTRUCTION = (
-    "Du bist ein einfühlsamer, kluger und theologisch fundierter Bibelberater."
-    " Die Person, mit der du sprichst, heißt Brigitte. Verwende ihren Namen"
-    " gelegentlich ganz natürlich im Gespräch (z. B. zur Begrüßung, bei"
-    " Ermutigungen oder passenden Übergängen), aber nicht in jedem Satz,"
-    " damit es sich echt und herzlich anfühlt. Deine Aufgabe ist es, in einem"
-    " lockeren, dialogorientierten Gespräch auf Fragen von Brigitte zu"
-    " antworten. Antworte nicht nur mit Bibelversen, sondern erkläre den"
-    " historischen und kulturellen Hintergrund. Wichtig: Stelle am Ende"
-    " deiner Antwort *immer* eine passende Rückfrage, um das Gespräch"
-    " vertiefend fortzuführen."
+    "Du bist ein einfühlsamer und theologisch fundierter Bibelberater."
+    " Die Person, mit du sprichst, heißt Brigitte. Verwende ihren Namen"
+    " gelegentlich ganz natürlich im Gespräch. Antworte in kompakten,"
+    " verständlichen Sätzen, erkläre den Hintergrund und stelle am Ende"
+    " *immer* eine kurze Rückfrage."
 )
 
 st.title("✝️ Bibelberater")
-st.caption("Dein persönlicher Begleiter in der Cloud – mit natürlicher Sprache.")
+st.caption("Dein persönlicher Begleiter in der Cloud – blitzschnell.")
 
 # Session States für Audio-Optionen
 if "voice_enabled" not in st.session_state:
-  st.session_state.voice_enabled = True  # Standardmäßig direkt an für den Komfort
+  st.session_state.voice_enabled = False
 
 # Sidebar für Verwaltung & Audio-Einstellungen
 with st.sidebar:
   st.header("⚙️ Optionen & Verwaltung")
   st.session_state.voice_enabled = st.toggle(
-      "🔊 Natürliche Sprachausgabe",
+      "🔊 Automatische Sprachausgabe",
       value=st.session_state.voice_enabled,
-      help=(
-          "Generiert eine natürlich klingende Sprachdatei für die Antworten."
-      ),
+      help="Liest die Antworten automatisch vor.",
   )
-  st.caption(f"Aktives Modell: `{ACTIVE_MODEL}`")
 
   st.divider()
   st.header("🗂️ Chat-Verwaltung")
@@ -168,45 +146,11 @@ with st.sidebar:
 if "messages" not in st.session_state:
   st.session_state.messages = load_history()
 
-if "chat_session" not in st.session_state:
-  st.session_state.chat_session = client.chats.create(
-      model=ACTIVE_MODEL,
-      config=genai.types.GenerateContentConfig(
-          system_instruction=SYSTEM_INSTRUCTION, temperature=0.7
-      ),
-  )
-
-
-# Hilfsfunktion zur Generierung von natürlich klingenden Audio-Antworten über Gemini TTS Modus
-def generate_natural_audio(text):
-  try:
-    # Wir fragen das Modell gezielt nach einer Audio-Ausgabe (Text-to-Speech Funktion der API)
-    response = client.models.generate_content(
-        model=ACTIVE_MODEL,
-        contents=[
-            (
-                "Lese diesen Text als professioneller Sprecher mit einer"
-                " warmen, angenehmen und flüssigen deutschen Stimme vor: "
-                + text
-            )
-        ],
-        config=genai.types.GenerateContentConfig(
-            response_mime_type="audio/mp3"
-        ),
-    )
-    # Da die API die Rohdaten liefert, falls direkt unterstützt, oder wir nutzen einen sauberen Fallback.
-    # Alternativ nutzen wir den optimierten WebSpeech-Befehl mit erhöhter Geschwindigkeit, falls Audio-Mime-Type blockiert wird:
-    return True
-  except Exception:
-    return False
-
-
 # Chatverlauf anzeigen
 for i, message in enumerate(st.session_state.messages):
   with st.chat_message(message["role"]):
     st.markdown(message["content"])
 
-    # Option zum Vorlesen alter Antworten mit angepasster, zügigerer Geschwindigkeit
     if message["role"] == "assistant":
       if st.button(
           "🔊 Vorlesen", key=f"tts_btn_{i}", help="Diese Antwort vorlesen"
@@ -216,10 +160,9 @@ for i, message in enumerate(st.session_state.messages):
                 <script>
                     var utterance = new SpeechSynthesisUtterance("{clean_text}");
                     utterance.lang = 'de-DE';
-                    utterance.rate = 1.1; // Flottere, angenehmere Sprechgeschwindigkeit
                     
                     var voices = window.speechSynthesis.getVoices();
-                    var preferredVoice = voices.find(v => v.lang === 'de-DE' && (v.name.includes('Google') || v.name.includes('Natural')));
+                    var preferredVoice = voices.find(v => v.lang === 'de-DE' && (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Online')));
                     if (!preferredVoice) {{
                         preferredVoice = voices.find(v => v.lang === 'de-DE' || v.lang === 'de_DE');
                     }}
@@ -232,17 +175,25 @@ for i, message in enumerate(st.session_state.messages):
         st.components.v1.html(js_code, height=0)
 
 
-# Funktion mit automatischer Wiederholung bei Lastspitzen
-def safe_send_message(chat_session, text):
-  max_retries = 3
-  for attempt in range(max_retries):
-    try:
-      return chat_session.send_message(text)
-    except Exception as e:
-      if "503" in str(e) and attempt < max_retries - 1:
-        time.sleep(2)
-        continue
-      raise e
+# Ultraschnelle Abfrage mit direktem Inhalts-Übertrag statt schwerem Chat-Objekt
+def get_fast_response(messages_history, new_user_input):
+  # Wir bauen die letzten Nachrichten als kompakten Kontext zusammen
+  contents = [SYSTEM_INSTRUCTION]
+  # Nur die letzten 6 Nachrichten nehmen, damit es rasend schnell bleibt
+  recent_msgs = messages_history[-6:]
+  for msg in recent_msgs:
+    role_prefix = "Nutzer: " if msg["role"] == "user" else "Assistent: "
+    contents.append(role_prefix + msg["content"])
+
+  contents.append("Nutzer: " + new_user_input)
+  contents.append("Assistent:")
+
+  response = client.models.generate_content(
+      model=ACTIVE_MODEL,
+      contents=contents,
+      config=genai.types.GenerateContentConfig(temperature=0.3, max_output_tokens=400),
+  )
+  return response.text
 
 
 # Chat-Eingabe
@@ -254,12 +205,12 @@ if user_input := st.chat_input("Schreibe deine Nachricht..."):
     st.markdown(user_input)
 
   with st.chat_message("assistant"):
-    with st.spinner("Der Bibelberater denkt nach..."):
+    with st.spinner("Der Bibelberater antwortet..."):
       try:
-        response = safe_send_message(
-            st.session_state.chat_session, user_input
+        # Direkter, schneller Abruf
+        bot_reply = get_fast_response(
+            st.session_state.messages[:-1], user_input
         )
-        bot_reply = response.text
         st.markdown(bot_reply)
 
         st.session_state.messages.append(
@@ -267,7 +218,6 @@ if user_input := st.chat_input("Schreibe deine Nachricht..."):
         )
         save_history(st.session_state.messages)
 
-        # Automatische Sprachausgabe mit flotterer, natürlicherer Geschwindigkeit (Rate 1.1)
         if st.session_state.voice_enabled:
           clean_reply = bot_reply.replace('"', "'").replace("\n", " ")
           tts_script = f"""
@@ -275,7 +225,6 @@ if user_input := st.chat_input("Schreibe deine Nachricht..."):
                         function playSpeech() {{
                             var utterance = new SpeechSynthesisUtterance("{clean_reply}");
                             utterance.lang = 'de-DE';
-                            utterance.rate = 1.1; // Zügigeres, natürlicheres Sprechtempo
                             
                             var voices = window.speechSynthesis.getVoices();
                             var preferredVoice = voices.find(v => v.lang === 'de-DE' && (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Online')));
@@ -300,7 +249,4 @@ if user_input := st.chat_input("Schreibe deine Nachricht..."):
           st.components.v1.html(tts_script, height=0)
 
       except Exception as e:
-        st.error(
-            "Der Server ist aktuell kurzzeitig ausgelastet. Bitte versuche es"
-            " in einem Moment noch einmal."
-        )
+        st.error(f"Fehler bei der Antwortgenerierung: {e}")
