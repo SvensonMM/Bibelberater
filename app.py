@@ -207,21 +207,19 @@ def safe_send_message(chat_session, text):
       raise e
 
 
-def process_user_input(text_to_process):
-  if not text_to_process:
-    return
-
-  st.session_state.messages.append({"role": "user", "content": text_to_process})
+# Chat-Eingabe (unten am Bildschirm, sauber und aufgeräumt)
+if user_input := st.chat_input("Schreibe deine Nachricht..."):
+  st.session_state.messages.append({"role": "user", "content": user_input})
   save_history(st.session_state.messages)
 
   with st.chat_message("user"):
-    st.markdown(text_to_process)
+    st.markdown(user_input)
 
   with st.chat_message("assistant"):
     with st.spinner("Der Bibelberater denkt nach..."):
       try:
         response = safe_send_message(
-            st.session_state.chat_session, text_to_process
+            st.session_state.chat_session, user_input
         )
         bot_reply = response.text
         st.markdown(bot_reply)
@@ -247,49 +245,3 @@ def process_user_input(text_to_process):
             "Der Server ist aktuell kurzzeitig ausgelastet. Bitte versuche es"
             " in einem Moment noch einmal."
         )
-
-
-# Option zum Hochladen einer Sprachdatei / Sprachnachricht direkt in der App
-uploaded_audio = st.file_uploader(
-    "🎙️ Sprachnachricht hochladen (optional)",
-    type=["wav", "mp3", "m4a", "ogg"],
-    help=(
-        "Nimm eine Sprachnachricht auf deinem Handy auf und lade sie hier hoch."
-    ),
-)
-
-if uploaded_audio is not None:
-  with st.spinner("Transkribiere Sprachnachricht..."):
-    temp_audio_path = "temp_uploaded_audio.wav"
-    try:
-      with open(temp_audio_path, "wb") as f:
-        f.write(uploaded_audio.getbuffer())
-
-      audio_file_ref = client.files.upload(file=temp_audio_path)
-
-      transcribe_response = client.models.generate_content(
-          model=ACTIVE_MODEL,
-          contents=[
-              (
-                  "Wandle diese Audionachricht exakt auf Deutsch in Text um."
-                  " Gib nur den transkribierten Text zurück, ohne Zusätze."
-              ),
-              audio_file_ref,
-          ],
-      )
-      spoken_text = transcribe_response.text.strip()
-
-      if os.path.exists(temp_audio_path):
-        os.remove(temp_audio_path)
-
-      if spoken_text:
-        process_user_input(spoken_text)
-
-    except Exception as e:
-      if os.path.exists(temp_audio_path):
-        os.remove(temp_audio_path)
-      st.error(f"Fehler bei der Sprachverarbeitung: {e}")
-
-# Normale Chat-Eingabe (Tastatur)
-if user_input := st.chat_input("Schreibe oder frage etwas..."):
-  process_user_input(user_input)
