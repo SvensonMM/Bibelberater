@@ -5,24 +5,9 @@ import time
 import streamlit as st
 from google import genai
 
-# Streamlit Page Setup mit Kreuz-Icon und Titel
+# Streamlit Page Setup mit dem exakten Titel für den Browser & Startbildschirm
 st.set_page_config(
     page_title="Bibelberater", page_icon="✝️", layout="centered"
-)
-
-# PWA-Manifest-Trick, damit Edge & Samsung direkt "Bibelberater" als Namen übernehmen
-st.markdown(
-    """
-    <link rel="manifest" href="data:application/manifest+json;charset=utf-8,{
-      'name': 'Bibelberater',
-      'short_name': 'Bibelberater',
-      'start_url': '.',
-      'display': 'standalone',
-      'background_color': '#ffffff',
-      'theme_color': '#ffffff'
-    }">
-""",
-    unsafe_allow_html=True,
 )
 
 # Dateinamen & Ordner für die Cloud-Sitzung
